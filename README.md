@@ -4,9 +4,91 @@ GeetaGPT is a high-performance **Retrieval-Augmented Generation (RAG)** applicat
 
 ---
 
+## 🎬 Demo
+
+![GeetaGPT Demo](demo.webp)
+
+*Ask spiritual questions and receive wisdom grounded in the Bhagavad Gita with real-time streaming responses.*
+
+---
+
 ## 🏗️ Architecture & How It Works
 
 GeetaGPT follows a classic RAG architecture, ensuring that the AI doesn't "hallucinate" but instead retrieves relevant verses from the Gita before generating a response.
+
+### High-Level Design (HLD)
+
+```mermaid
+flowchart TB
+    subgraph User["👤 User"]
+        A[Ask Question]
+    end
+    
+    subgraph Frontend["🌐 Frontend (Next.js)"]
+        B[Chat UI]
+        C[API Route /api/chat]
+    end
+    
+    subgraph Backend["⚡ Backend (FastAPI)"]
+        D[POST /chat Endpoint]
+        subgraph RAG["🔄 RAG Pipeline"]
+            E[Query Embedding]
+            F[(FAISS Vector Store)]
+            G[Retriever - Top 5 Chunks]
+            H[Context Builder]
+        end
+    end
+    
+    subgraph Embeddings["🧠 Local Embeddings"]
+        I[all-MiniLM-L6-v2]
+    end
+    
+    subgraph LLM["🤖 LLM (OpenRouter)"]
+        J[DeepSeek R1]
+    end
+    
+    subgraph Data["📚 Data Source"]
+        K[Bhagavad Gita PDF]
+        L[(Pre-indexed Vectors)]
+    end
+
+    A --> B
+    B --> C
+    C -->|HTTP POST| D
+    D --> E
+    E --> I
+    I --> F
+    F --> G
+    G --> H
+    K -.->|One-time indexing| L
+    L -.-> F
+    H -->|Question + Context| J
+    J -->|Streaming Response| D
+    D -->|SSE Stream| C
+    C --> B
+    B --> A
+
+    style User fill:#e91e63,stroke:#c2185b,color:#fff
+    style Frontend fill:#7c4dff,stroke:#651fff,color:#fff
+    style Backend fill:#00bcd4,stroke:#0097a7,color:#fff
+    style RAG fill:#26a69a,stroke:#00897b,color:#fff
+    style Embeddings fill:#ff7043,stroke:#f4511e,color:#fff
+    style LLM fill:#ab47bc,stroke:#8e24aa,color:#fff
+    style Data fill:#5c6bc0,stroke:#3949ab,color:#fff
+```
+
+### Data Flow
+
+| Step | Component | Action |
+|------|-----------|--------|
+| 1️⃣ | **User** | Asks a spiritual question |
+| 2️⃣ | **Next.js UI** | Sends request to API route |
+| 3️⃣ | **API Route** | Proxies to FastAPI backend |
+| 4️⃣ | **FastAPI** | Embeds query using local model |
+| 5️⃣ | **FAISS** | Retrieves 5 most similar chunks |
+| 6️⃣ | **RAG Chain** | Builds context from chunks |
+| 7️⃣ | **DeepSeek R1** | Generates grounded response |
+| 8️⃣ | **Streaming** | Response streams back to user |
 
 ### 1. The RAG Pipeline (Backend)
 The backend is built with **FastAPI** and **LangChain**. Here's the step-by-step data flow:
