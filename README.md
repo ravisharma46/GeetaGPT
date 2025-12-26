@@ -18,7 +18,7 @@ GeetaGPT is a high-performance **Retrieval-Augmented Generation (RAG)** applicat
 
 ## 🏗️ Architecture & How It Works
 
-GeetaGPT follows a classic RAG architecture, ensuring that the AI doesn't "hallucinate" but instead retrieves relevant verses from the Gita before generating a response.
+GeetaGPT is a **serverless RAG (Retrieval-Augmented Generation)** application deployed on **Vercel**. It uses **Upstash Vector** for cloud-native vector storage and ensures grounded AI responses based strictly on the Bhagavad Gita.
 
 ### High-Level Design (HLD)
 
@@ -28,55 +28,57 @@ flowchart TB
         A[Ask Question]
     end
     
-    subgraph Frontend["🌐 Frontend (Next.js)"]
-        B[Chat UI]
-        C[API Route /api/chat]
+    subgraph Frontend["🌐 Frontend (Next.js 16)"]
+        B[Chat UI<br/>React 19 + Framer Motion]
+        C[API Route<br/>/api/chat]
     end
     
-    subgraph Backend["⚡ Backend (FastAPI)"]
-        D[POST /chat Endpoint]
+    subgraph Vercel["☁️ Vercel Edge Platform"]
+        D[Edge Function Handler]
         subgraph RAG["🔄 RAG Pipeline"]
-            E[Query Embedding]
-            F[(FAISS Vector Store)]
-            G[Retriever - Top 5 Chunks]
-            H[Context Builder]
+            E[Query Processing]
+            F[Vector Search<br/>Top 5 Chunks]
+            G[Context Builder]
+            H[Prompt Construction]
         end
     end
     
-    subgraph Embeddings["🧠 Local Embeddings"]
-        I[all-MiniLM-L6-v2]
+    subgraph VectorDB["🗄️ Upstash Vector"]
+        I[(Pre-indexed Embeddings)]
+        J[Built-in Embedding Model]
     end
     
     subgraph LLM["🤖 LLM (OpenRouter)"]
-        J[DeepSeek R1]
+        K[DeepSeek R1T2 Chimera]
     end
     
     subgraph Data["📚 Data Source"]
-        K[Bhagavad Gita PDF]
-        L[(Pre-indexed Vectors)]
+        L[Bhagavad Gita PDF]
+        M[One-time Indexing Script]
     end
 
     A --> B
     B --> C
-    C -->|HTTP POST| D
+    C --> D
     D --> E
-    E --> I
-    I --> F
+    E -->|Query Text| J
+    J -->|Auto-Embed| I
+    I -->|Similar Vectors| F
     F --> G
     G --> H
-    K -.->|One-time indexing| L
-    L -.-> F
-    H -->|Question + Context| J
-    J -->|Streaming Response| D
+    L -.->|npm run index| M
+    M -.->|Upload Vectors| I
+    H -->|System Prompt + Context + Question| K
+    K -->|Streaming Response| D
     D -->|SSE Stream| C
     C --> B
     B --> A
 
     style User fill:#e91e63,stroke:#c2185b,color:#fff
     style Frontend fill:#7c4dff,stroke:#651fff,color:#fff
-    style Backend fill:#00bcd4,stroke:#0097a7,color:#fff
+    style Vercel fill:#00bcd4,stroke:#0097a7,color:#fff
     style RAG fill:#26a69a,stroke:#00897b,color:#fff
-    style Embeddings fill:#ff7043,stroke:#f4511e,color:#fff
+    style VectorDB fill:#ff7043,stroke:#f4511e,color:#fff
     style LLM fill:#ab47bc,stroke:#8e24aa,color:#fff
     style Data fill:#5c6bc0,stroke:#3949ab,color:#fff
 ```
@@ -85,97 +87,164 @@ flowchart TB
 
 | Step | Component | Action |
 |------|-----------|--------|
-| 1️⃣ | **User** | Asks a spiritual question |
-| 2️⃣ | **Next.js UI** | Sends request to API route |
-| 3️⃣ | **API Route** | Proxies to FastAPI backend |
-| 4️⃣ | **FastAPI** | Embeds query using local model |
-| 5️⃣ | **FAISS** | Retrieves 5 most similar chunks |
-| 6️⃣ | **RAG Chain** | Builds context from chunks |
-| 7️⃣ | **DeepSeek R1** | Generates grounded response |
-| 8️⃣ | **Streaming** | Response streams back to user |
+| 1️⃣ | **User** | Asks a spiritual question via the chat UI |
+| 2️⃣ | **Next.js Frontend** | Sends POST request to `/api/chat` |
+| 3️⃣ | **Vercel Edge Function** | Receives request and processes query |
+| 4️⃣ | **Upstash Vector** | Auto-embeds query and searches for top 5 similar chunks |
+| 5️⃣ | **Context Builder** | Combines retrieved chunks into context |
+| 6️⃣ | **Prompt Construction** | Creates system prompt with context + user question |
+| 7️⃣ | **OpenRouter (DeepSeek R1)** | Generates grounded response based on context |
+| 8️⃣ | **Streaming Response** | Streams answer back to user in real-time |
 
-### 1. The RAG Pipeline (Backend)
-The backend is built with **FastAPI** and **LangChain**. Here's the step-by-step data flow:
+### 1. The Serverless RAG Pipeline
+The entire RAG pipeline is implemented as a **Vercel Edge Function** in the Next.js API route. Here's how it works:
 
-1.  **Document Ingestion**: The system reads the `bhagavad_gita.pdf` from the `backend/app/data/` directory.
-2.  **Text Chunking**: The text is broken down into smaller, overlapping segments (chunks) to preserve context.
-3.  **Vector Embeddings**: Each chunk is converted into a numerical vector using the `all-MiniLM-L6-v2` model. This allows for semantic searching.
-4.  **Vector Storage (FAISS)**: The vectors are stored in a local **FAISS** index for lightning-fast retrieval.
-5.  **Retrieval**: When you ask a question, the system finds the 5 most relevant chunks from the Gita.
-6.  **Augmented Generation**: The question + retrieved chunks are sent to the **DeepSeek R1** model (via OpenRouter) with a strict instruction: *"Only answer using the provided context."*
-7.  **Streaming**: The response is streamed back to the user in real-time.
+1.  **Query Reception**: User sends a question via the chat UI (`/api/chat` API route).
+2.  **Automatic Embedding**: Upstash Vector automatically generates embeddings for the query using its built-in model (no manual embedding needed).
+3.  **Vector Search**: Upstash searches the pre-indexed vector database and returns the top 5 most semantically similar chunks from the Bhagavad Gita.
+4.  **Context Assembly**: Retrieved chunks are concatenated with separators to form the context.
+5.  **Prompt Engineering**: A strict system prompt is constructed:
+    ```
+    You are GeetaGPT. Answer ONLY using the provided context from the Bhagavad Gita.
+    If the answer is not in the context, say: "The Bhagavad Gita does not explicitly address this."
+    ```
+6.  **LLM Generation**: The prompt + context + user question is sent to **DeepSeek R1T2 Chimera** via OpenRouter API.
+7.  **Streaming Response**: The LLM response is streamed back token-by-token for a real-time conversational experience.
+
+**Key Technologies:**
+- **Upstash Vector**: Serverless vector database with built-in embeddings
+- **OpenRouter**: LLM gateway for accessing DeepSeek R1
+- **Vercel Edge Functions**: Zero-config serverless deployment
 
 ### 2. The Interactive UI (Frontend)
-The frontend is built with **Next.js 15+** and **Tailwind CSS**.
+The frontend is built with **Next.js 16** (App Router) and **React 19**:
 
-- **Modern UX**: Uses **Framer Motion** for smooth animations and transitions.
-- **Real-time Streaming**: Implements chunk-by-chunk rendering for a snappy, conversational feel.
-- **Glassmorphism Design**: A premium, spiritual aesthetic with soft gradients and blurred backgrounds.
-- **API Proxy**: The Next.js API routes act as a secure bridge to the FastAPI backend.
+- **Modern UX**: Uses **Framer Motion** for smooth page transitions and micro-animations
+- **Real-time Streaming**: Implements token-by-token rendering for instant feedback
+- **Responsive Design**: Fully optimized for mobile, tablet, and desktop
+- **Glassmorphism Aesthetic**: Premium spiritual design with soft gradients and blurred backgrounds
+- **Tailwind CSS 4.0**: Utility-first styling with custom color palette
+
+### 3. One-Time Indexing Process
+Before deployment, the Bhagavad Gita PDF is indexed once:
+
+1.  **PDF Parsing**: Extract text from `bhagavad_gita.pdf`
+2.  **Text Chunking**: Split into overlapping chunks (preserves context)
+3.  **Upload to Upstash**: Send chunks to Upstash Vector (embeddings generated automatically)
+4.  **Ready to Use**: Vector database is now queryable from the Edge Function
+
+**Command**: `npm run index` (in `frontend/scripts/index-pdf.ts`)
 
 ---
 
 ## 🛠️ Tech Stack
 
-### Backend
-- **Framework**: FastAPI (Python)
-- **Orchestration**: LangChain
-- **Vector DB**: FAISS
-- **Embeddings**: Sentence-Transformers (`all-MiniLM-L6-v2`)
-- **LLM Engine**: DeepSeek R1 via OpenRouter
-
-### Frontend
-- **Framework**: Next.js (App Router, TypeScript)
+### Frontend (Next.js Serverless)
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **UI Library**: React 19
+- **Styling**: Tailwind CSS 4.0
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
-- **Styling**: Tailwind CSS 4.0
+- **HTTP Client**: OpenAI SDK (for OpenRouter integration)
+
+### Backend (Serverless)
+- **Deployment**: Vercel Edge Functions
+- **Vector Database**: Upstash Vector (serverless, built-in embeddings)
+- **LLM Engine**: DeepSeek R1T2 Chimera via OpenRouter
+- **Indexing Script**: Node.js + TypeScript (`tsx`)
+
+### Infrastructure
+- **Hosting**: Vercel (Frontend + Edge Functions)
+- **Vector Storage**: Upstash (Serverless Vector Database)
+- **LLM Gateway**: OpenRouter (API access to DeepSeek R1)
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.10+
 - Node.js 18+
-- An OpenRouter API Key
+- An OpenRouter API Key ([Get one here](https://openrouter.ai/))
+- An Upstash Vector Database ([Create free account](https://upstash.com/))
 
-### 1. Setup Backend
+### 1. Clone the Repository
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+git clone https://github.com/ravisharma46/GeetaGPT.git
+cd GeetaGPT/frontend
 ```
 
-**Environment Variables**: Create a `.env` file in `backend/` or set them in your shell:
-```env
-OPENROUTER_API_KEY=your_key_here
-PDF_PATH=./app/data/bhagavad_gita.pdf
-VECTOR_DB_PATH=faiss_index
-LLM_MODEL=tngtech/deepseek-r1t2-chimera:free
-```
-
-**Run Server**:
+### 2. Install Dependencies
 ```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-### 2. Setup Frontend
-```bash
-cd frontend
 npm install
+```
+
+### 3. Configure Environment Variables
+Create a `.env.local` file in the `frontend/` directory:
+
+```env
+# OpenRouter API Key
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# Upstash Vector Database
+UPSTASH_VECTOR_REST_URL=https://your-endpoint.upstash.io
+UPSTASH_VECTOR_REST_TOKEN=your_upstash_token_here
+```
+
+**Where to get these:**
+- **OpenRouter API Key**: Sign up at [openrouter.ai](https://openrouter.ai/) and create an API key
+- **Upstash Credentials**: 
+  1. Create a free account at [upstash.com](https://upstash.com/)
+  2. Create a new Vector Database
+  3. Copy the `REST URL` and `REST TOKEN` from the database dashboard
+
+### 4. Index the Bhagavad Gita (One-Time Setup)
+Place your `bhagavad_gita.pdf` in the `frontend/` directory, then run:
+
+```bash
+npm run index
+```
+
+This script will:
+- Parse the PDF
+- Split it into semantic chunks
+- Upload chunks to Upstash Vector (embeddings are generated automatically)
+
+**Note**: You only need to run this once. The vectors persist in Upstash cloud.
+
+### 5. Run the Development Server
+```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to start your journey.
+
+Open [http://localhost:3000](http://localhost:3000) to start your spiritual journey.
+
+### 6. Deploy to Vercel (Optional)
+The app is fully serverless and ready to deploy:
+
+```bash
+npm install -g vercel
+vercel
+```
+
+Or connect your GitHub repository to Vercel for automatic deployments.
+
+**Important**: Make sure to add your environment variables in the Vercel dashboard under Project Settings → Environment Variables.
 
 ---
 
 ## ✨ Features
-- **Strict Grounding**: Only answers based on the Bhagavad Gita text.
-- **Source Attributions**: Provides verse references for every answer.
-- **Persistent Index**: The PDF is indexed only once; subsequent starts are nearly instant.
-- **Mobile Responsive**: Fully optimized for phones and tablets.
-- **Premium Design**: Spiritual vibes with high-end animations.
+
+- ✅ **100% Grounded Responses**: Only answers based on the Bhagavad Gita text, no hallucinations
+- ✅ **Serverless Architecture**: Deploy globally with zero server management
+- ✅ **Cloud-Native Vector DB**: Upstash Vector for ultra-fast semantic search
+- ✅ **Real-Time Streaming**: Token-by-token response rendering for instant feedback
+- ✅ **Automatic Embeddings**: No manual embedding pipeline, Upstash handles it automatically
+- ✅ **Source Citations**: Provides chapter and verse references when available
+- ✅ **Mobile Responsive**: Fully optimized for phones, tablets, and desktops
+- ✅ **Premium UI/UX**: Spiritual aesthetic with glassmorphism and smooth animations
+- ✅ **One-Click Deployment**: Ready to deploy to Vercel in seconds
+- ✅ **Free Tier Ready**: Works with Upstash and OpenRouter free tiers
 
 ---
 
