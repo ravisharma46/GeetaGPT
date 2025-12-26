@@ -8,15 +8,7 @@ GeetaGPT is a high-performance **Retrieval-Augmented Generation (RAG)** applicat
 
 ---
 
-## 🎬 Demo
-
-![GeetaGPT Demo](demo.webp)
-
-*Ask spiritual questions and receive wisdom grounded in the Bhagavad Gita with real-time streaming responses.*
-
----
-
-## 🏗️ Architecture & How It Works
+## ️ Architecture & How It Works
 
 GeetaGPT is a **serverless RAG (Retrieval-Augmented Generation)** application deployed on **Vercel**. It uses **Upstash Vector** for cloud-native vector storage and ensures grounded AI responses based strictly on the Bhagavad Gita.
 
