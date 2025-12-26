@@ -1,6 +1,10 @@
 # GeetaGPT: Spiritual Guidance through AI 🕉️
 
+[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-geetagpt--silk.vercel.app-blue?style=for-the-badge)](https://geetagpt-silk.vercel.app)
+
 GeetaGPT is a high-performance **Retrieval-Augmented Generation (RAG)** application designed to provide spiritual wisdom and guidance based strictly on the **Bhagavad Gita**. It leverages state-of-the-art AI models to ensure that every answer is grounded in the sacred text.
+
+**🚀 Try it now: [geetagpt-silk.vercel.app](https://geetagpt-silk.vercel.app)**
 
 ---
 
