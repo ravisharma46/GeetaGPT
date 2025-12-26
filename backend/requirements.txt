@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+langchain==0.3.13
+langchain-community==0.3.13
+langchain-core==0.3.28
+langchain-huggingface
+sentence-transformers
+faiss-cpu
+pypdf
+python-dotenv
+python-multipart
+# reportlab was manually installed, add it here for completeness
+reportlab
+langchain-openai
